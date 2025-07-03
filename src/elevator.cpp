@@ -1,5 +1,8 @@
 #include "elevator.h"
 
+using namespace std;
+
+
 Person::Person()
 {
     currentFloor = rand_dis(gen);
@@ -13,6 +16,8 @@ Person::Person()
 
 Person::Person(int currFloor)
 {
+    assert(0 <= currFloor && currFloor < BUILDING_HEIGHT);
+
     currentFloor = currFloor;
     desiredFloor = rand_dis(gen);
 
@@ -24,6 +29,9 @@ Person::Person(int currFloor)
 
 Person::Person(int currFloor, int desiredFloor)
 {
+    assert(0 <= currFloor && currFloor < BUILDING_HEIGHT);
+    assert(0 <= desiredFloor && desiredFloor < BUILDING_HEIGHT);
+    
     currentFloor = currFloor;
     desiredFloor = desiredFloor;
 }

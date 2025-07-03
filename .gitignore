@@ -3,9 +3,7 @@
 
 # executables
 **\exe
+*.exe
 
 # temporary files
 **\tmp
-
-# tests
-**\tests

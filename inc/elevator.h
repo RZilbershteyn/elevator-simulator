@@ -2,19 +2,22 @@
 #define ELEVATOR_H
 
 #include <iostream>
+#include <string>
 #include <list>      // For passengers in the cabin.
 #include <queue>     // For passengers queue.
 #include <random>    // For random number generator
+#include <assert.h>
 
-using namespace std;
+// using namespace std;
 
 
-#define BUILDING_HEIGHT 10
-#define ELEVATOR_CAPACITY 4
+inline constexpr int BUILDING_HEIGHT = 10;
+inline constexpr int ELEVATOR_CAPACITY = 4;
+
 
 // Uniform number distribution
-extern mt19937 gen;
-extern uniform_int_distribution<> rand_dis;
+extern std::mt19937 gen;
+extern std::uniform_int_distribution<> rand_dis;
 
 /**
  * @class Person
@@ -59,10 +62,10 @@ public:
 
 
     /// Display the current state of the simulation.
-    void displayState(const vector<queue<Person>> &floors) const;
+    void displayState(const std::vector<std::queue<Person>> &floors) const;
 
     /// do 1 time step
-    void proceed(vector<queue<Person>> &floors);
+    void proceed(std::vector<std::queue<Person>> &floors);
 
     void call(int floor);
     void order(int floor);
@@ -76,20 +79,20 @@ private:
     static Elevator* instance;
 
     enum States {
-        Resting,              // 0 no passengers, no calls
-        GoingUp,              // 1
-        GoingDown,            // 2
-        PendingDoorsToOpen,   // 3
-        PendingDoorsToClose,  // 4
-        LoadingPassengers,    // 5
-        DroppignPassengers    // 6
+        Resting,  // no passengers, no calls
+        GoingUp,
+        GoingDown,
+        PendingDoorsToOpen,
+        PendingDoorsToClose,
+        LoadingPassengers,
+        DroppignPassengers
     } currentState, memoryState;
 
     int currentFloor;
     int progress;
     int targetFloor;
     bool isDoorsOpen;
-    list<Person> cabin;
+    std::list<Person> cabin;
     
     bool callButtons[BUILDING_HEIGHT];
     bool orderedFloors[BUILDING_HEIGHT];

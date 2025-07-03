@@ -1,20 +1,23 @@
 #include <windows.h>
+#include "elevator.h"
 
 #include <iostream>
 #include <string>
-#include <chrono>
-// #include <random>   // For random number generator
+#include <vector>
+#include <queue>    // For passengers queue and user actions queue
+#include <chrono>   // For chrono::seconds()
+#include <random>   // For random number generator
 #include <cstdlib>  // For system()
-#include <iomanip>  // For std::setw and std::setprecision>
-
-#include "elevator.h"
-#include <queue>
 
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 
 using namespace std;
+
+
+inline constexpr float PERSONAPEARCHANCE = 10.0;  // % a new person apearance chance.
+
 
 HWND hMainWindow;
 
@@ -27,11 +30,9 @@ HWND hSubmitButton;
 
 WNDPROC OriginalEditProc;
 
-#define PERSONAPEARCHANCE 10  // % chance of apearance of a new person.
-
-
 // Window procedure declaration
 LRESULT CALLBACK MainWndProc(HWND, UINT, WPARAM, LPARAM);
+
 
 // Create the elevator object.
 Elevator* Elevator::instance = nullptr;
@@ -43,7 +44,20 @@ mt19937 gen = mt19937{rd()};  // Standard mersenne_twister_engine seeded with rd
 uniform_int_distribution<> rand_dis = uniform_int_distribution<>{0, BUILDING_HEIGHT - 1};
 uniform_int_distribution<> rand_dis_appear_chance = uniform_int_distribution<>{0, 100};
 
+size_t currTime = 0;
+vector<queue<Person>> floors(BUILDING_HEIGHT);
+queue<pair<int, int>> userActionQueue;  // Queue of pairs of actionIdx and floorIdx
+mutex userActionQueueMutex, endgameMutex;
+condition_variable endgameCV;
 
+bool gameRunFlag = true;
+bool gameEndedFlag = false;
+
+
+/**
+ * @brief On every call creates a person on a random floor from the given floors with a chance of PERSONAPEARCHANCE %.
+ * @param floors
+ */
 void appearPerson(vector<queue<Person>> &floors)
 {
     if (rand_dis_appear_chance(gen) < PERSONAPEARCHANCE) {
@@ -53,24 +67,25 @@ void appearPerson(vector<queue<Person>> &floors)
     }
 }
 
-void addPerson(vector<queue<Person>> &floors, int floor)
+
+/**
+ * @brief Creates a person on the floorIdx-th floor of the floors.
+ * @param floors
+ * @param floorIdx Index of the floor a person to be created. If floorIdx exceeds [0, BUILDING_HEIGHT) range, does nothing.
+ */
+void addPerson(vector<queue<Person>> &floors, int floorIdx)
 {
-    Person person(floor);
-    floors[person.getCurrentFloor()].push(person);
-    elevator.call(person.getCurrentFloor());
+    if (0 <= floorIdx && floorIdx < BUILDING_HEIGHT) {
+        Person person(floorIdx);
+        floors[person.getCurrentFloor()].push(person);
+        elevator.call(person.getCurrentFloor());
+    }
 }
 
 
-size_t currTime = 0;
-vector<queue<Person>> floors(BUILDING_HEIGHT);
-queue<pair<int, int>> userActionQueue;
-mutex userActionQueueMutex, endgameMutex;
-condition_variable endgameCV;
-
-bool gameRunFlag = true;
-bool gameEndedFlag = false;
-
-// Main game loop (runs in a separate thread)
+/**
+ * @brief Main game loop (runs in a separate thread)
+ */
 void GameLoop()
 {
     while (gameRunFlag)
@@ -87,6 +102,7 @@ void GameLoop()
                     case 2: addPerson(floors, userActionQueue.front().second); break;
                     default: break;
                 }
+
                 userActionQueue.pop();
             }
         }
@@ -102,19 +118,27 @@ void GameLoop()
         currTime++;
     }
 
+    // notify about the termination of secondary (simulation) thread
     {
         lock_guard<mutex> lock(endgameMutex);
         gameEndedFlag = true;
-        endgameCV.notify_all();  // notify about
+        endgameCV.notify_all();
     }
 }
 
-// Main Window Procedure (should only handle UI events)
+/**
+ * @brief Main Window Procedure (should only handle UI events)
+ * @param hwnd 
+ * @param msg 
+ * @param wParam 
+ * @param lParam 
+ * @return 
+ */
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)
     {
-        case WM_COMMAND:  // Fixed typo
+        case WM_COMMAND:
         {
             if (LOWORD(wParam) == IDC_SUBMITBTN)
             {
@@ -169,9 +193,22 @@ void EnableConsole() {
     freopen_s(&fpErr, "CONOUT$", "w", stderr);
 }
 
-// Application entry point
+/**
+ * @brief Application entry point
+ * @param hInstance 
+ * @param hPrevInstance 
+ * @param szCmdLine 
+ * @param iCmdShow 
+ * @return 
+ */
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine, int iCmdShow)
 {
+    // Validate predefined constants
+    assert(BUILDING_HEIGHT > 0);
+    assert(ELEVATOR_CAPACITY > 0);
+    assert(0 <= PERSONAPEARCHANCE && PERSONAPEARCHANCE <= 100);
+
+
     // Enable console as a display for a simulation.
     EnableConsole();
 
@@ -181,8 +218,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine,
                       NULL, L"MainWindowClass", NULL };
     RegisterClassExW(&wc);
 
-    // =============================================================================================================
-    // Create main window
+    // ============================================= Create main window =============================================
     hMainWindow = CreateWindowW(L"MainWindowClass", L"Configuration Window", WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, 400, 400, NULL, NULL, hInstance, NULL);
 
@@ -190,13 +226,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine,
     int yPos = 20, yStep = 35;
     int xPos = 20;
 
-    // Create comboboxes for words' sphere and specifications choice.
+    // Create comboboxe for type of the action choice.
     hComboAction = CreateWindowW(L"COMBOBOX", L"Action", WS_VISIBLE | WS_CHILD | CBS_DROPDOWN | CBS_HASSTRINGS,
                                 xPos, yPos, 90, 150, hMainWindow, (HMENU) IDC_COMBOACTION, hInstance, NULL);
-    SendMessage(hComboAction, CB_ADDSTRING, 0, (LPARAM) "call");
-    SendMessage(hComboAction, CB_ADDSTRING, 0, (LPARAM) "order");
-    SendMessage(hComboAction, CB_ADDSTRING, 0, (LPARAM) "add passenger");
+    SendMessage(hComboAction, CB_ADDSTRING, 0, (LPARAM) "call");           // Push the elevator call button on the chosen floor.
+    SendMessage(hComboAction, CB_ADDSTRING, 0, (LPARAM) "order");          // Push the desired floor button in the elevator's cabin.
+    SendMessage(hComboAction, CB_ADDSTRING, 0, (LPARAM) "add passenger");  // Add a passenger on the chosen dloor.
 
+
+    // Create comboboxe for floor choice.
     yPos += yStep;
     hComboFloors = CreateWindowW(L"COMBOBOX", L"Floor", WS_VISIBLE | WS_CHILD | CBS_DROPDOWN | CBS_HASSTRINGS,
                                 xPos, yPos, 90, 150, hMainWindow, (HMENU) IDC_COMBOFLOORS, hInstance, NULL);
@@ -204,17 +242,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine,
         SendMessage(hComboFloors, CB_ADDSTRING, 0, (LPARAM) to_wstring(i).c_str());
     }
 
+
+    // Create submit button for the chosen action submition.
     yPos += yStep;
     hSubmitButton = CreateWindowW(L"BUTTON", L"Submit", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
                               xPos, yPos, 100, 30, hMainWindow, (HMENU) IDC_SUBMITBTN, hInstance, NULL);
 
 
-    // =============================================================================================================
+    // ==============================================================================================================
 
     ShowWindow(hMainWindow, iCmdShow);
     UpdateWindow(hMainWindow);
 
-    std::thread gameThread(GameLoop);
+    std::thread gameThread(GameLoop);  // Create secondary thread to run simulation, while the main thread processes user inputs.
     gameThread.detach();  // Before destroying main window, i.e. main thread terminates, main thread sends signal to break the game loop, and waits until gameThread is terminated.
 
     // Message loop
