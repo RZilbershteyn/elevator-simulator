@@ -35,7 +35,6 @@ LRESULT CALLBACK MainWndProc(HWND, UINT, WPARAM, LPARAM);
 
 
 // Create the elevator object.
-Elevator* Elevator::instance = nullptr;
 Elevator& elevator = Elevator::getInstance();
 
 // Uniform distribution of random numbers

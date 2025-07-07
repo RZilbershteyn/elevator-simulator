@@ -48,12 +48,8 @@ class Elevator
 {
 public:
     static Elevator& getInstance() {
-        // If the instance doesn't exists, create it.
-        if (!instance) {
-            instance = new Elevator();
-        }
-        
-        return *instance;
+        static Elevator instance;        
+        return instance;
     }
 
     // Delete the copy constructor and assignment operator.
@@ -75,8 +71,6 @@ public:
 private:
     Elevator();
     ~Elevator(){};
-
-    static Elevator* instance;
 
     enum States {
         Resting,  // no passengers, no calls
@@ -101,4 +95,4 @@ private:
     void _updateDirection();
 };
 
-#endif
+#endif  // ELEVATOR_H
